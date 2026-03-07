@@ -1,0 +1,370 @@
+- hosts: web
+  become: true
+
+  vars:
+    ssh_port: 2222
+
+  tasks:
+
+  ####################################
+  # 1️⃣ SYSTEM UPDATES
+  ####################################
+
+  - name: Update apt cache
+    apt:
+      update_cache: yes
+      cache_valid_time: 3600
+
+  - name: Upgrade all packages
+    apt:
+      upgrade: dist
+      autoremove: yes
+      autoclean: yes
+
+  - name: Install unattended-upgrades
+    apt:
+      name: unattended-upgrades
+      state: present
+
+  - name: Enable automatic security updates
+    copy:
+      dest: /etc/apt/apt.conf.d/20auto-upgrades
+      content: |
+        APT::Periodic::Update-Package-Lists "1";
+        APT::Periodic::Unattended-Upgrade "1";
+      owner: root
+      group: root
+      mode: "0644"
+
+  ####################################
+  # 2️⃣ KERNEL HARDENING
+  ####################################
+
+  - name: Apply sysctl hardening
+    sysctl:
+      name: "{{ item.key }}"
+      value: "{{ item.value }}"
+      state: present
+      reload: yes
+      sysctl_file: /etc/sysctl.d/99-hardening.conf
+    loop:
+      - { key: "net.ipv4.ip_forward",                    value: "0" }
+      - { key: "net.ipv4.conf.all.send_redirects",       value: "0" }
+      - { key: "net.ipv4.conf.default.send_redirects",   value: "0" }
+      - { key: "net.ipv4.conf.all.accept_source_route",  value: "0" }
+      - { key: "net.ipv4.conf.default.accept_source_route", value: "0" }
+      - { key: "net.ipv4.conf.all.accept_redirects",     value: "0" }
+      - { key: "net.ipv4.conf.default.accept_redirects", value: "0" }
+      - { key: "net.ipv4.conf.all.log_martians",         value: "1" }
+      - { key: "net.ipv4.tcp_syncookies",                value: "1" }
+      - { key: "kernel.randomize_va_space",              value: "2" }
+      - { key: "fs.suid_dumpable",                       value: "0" }
+
+  ####################################
+  # 3️⃣ REMOVE UNUSED SERVICES
+  ####################################
+
+  - name: Disable snapd service
+    service:
+      name: snapd
+      state: stopped
+      enabled: no
+    ignore_errors: true
+
+  - name: Remove snapd package
+    apt:
+      name: snapd
+      state: absent
+      purge: yes
+    ignore_errors: true
+
+  ####################################
+  # 4️⃣ INSTALL APACHE
+  ####################################
+
+  - name: Install Apache and required modules
+    apt:
+      name:
+        - apache2
+        - apache2-utils
+      state: present
+      update_cache: yes
+    notify: Restart Apache
+
+  - name: Enable Apache modules
+    apache2_module:
+      name: "{{ item }}"
+      state: present
+    loop:
+      - rewrite
+      - headers
+      - ssl
+    notify: Restart Apache
+    ignore_errors: "{{ ansible_check_mode }}"
+
+  - name: Disable Apache server tokens (hide version)
+    lineinfile:
+      path: /etc/apache2/conf-available/security.conf
+      regexp: "^ServerTokens"
+      line: "ServerTokens Prod"
+      state: present
+    notify: Restart Apache
+
+  - name: Disable Apache server signature
+    lineinfile:
+      path: /etc/apache2/conf-available/security.conf
+      regexp: "^ServerSignature"
+      line: "ServerSignature Off"
+      state: present
+    notify: Restart Apache
+
+  - name: Ensure Apache is running
+    service:
+      name: apache2
+      state: started
+      enabled: yes
+    # Prevents failure during --check mode when Apache was not yet installed
+    ignore_errors: "{{ ansible_check_mode }}"
+
+  ####################################
+  # 5️⃣ SSH HARDENING
+  ####################################
+
+  - name: Set custom SSH port
+    lineinfile:
+      path: /etc/ssh/sshd_config
+      regexp: '^#?Port'
+      line: "Port {{ ssh_port }}"
+      state: present
+      validate: sshd -t -f %s
+    notify: Reload SSH
+
+  - name: Disable root login
+    lineinfile:
+      path: /etc/ssh/sshd_config
+      regexp: '^#?PermitRootLogin'
+      line: 'PermitRootLogin no'
+      state: present
+      validate: sshd -t -f %s
+    notify: Reload SSH
+
+  - name: Disable password authentication
+    lineinfile:
+      path: /etc/ssh/sshd_config
+      regexp: '^#?PasswordAuthentication'
+      line: 'PasswordAuthentication no'
+      state: present
+      validate: sshd -t -f %s
+    notify: Reload SSH
+
+  - name: Ensure PubkeyAuthentication is enabled
+    lineinfile:
+      path: /etc/ssh/sshd_config
+      regexp: '^#?PubkeyAuthentication'
+      line: 'PubkeyAuthentication yes'
+      state: present
+      validate: sshd -t -f %s
+    notify: Reload SSH
+
+  - name: Set SSH idle timeout (10 minutes)
+    lineinfile:
+      path: /etc/ssh/sshd_config
+      regexp: '^#?ClientAliveInterval'
+      line: 'ClientAliveInterval 600'
+      state: present
+      validate: sshd -t -f %s
+    notify: Reload SSH
+
+  - name: Limit SSH max auth tries
+    lineinfile:
+      path: /etc/ssh/sshd_config
+      regexp: '^#?MaxAuthTries'
+      line: 'MaxAuthTries 3'
+      state: present
+      validate: sshd -t -f %s
+    notify: Reload SSH
+
+  ####################################
+  # 6️⃣ UFW FIREWALL
+  ####################################
+
+  - name: Install UFW
+    apt:
+      name: ufw
+      state: present
+
+  - name: Set UFW default policies
+    ufw:
+      direction: "{{ item.direction }}"
+      policy: "{{ item.policy }}"
+    loop:
+      - { direction: incoming, policy: deny }
+      - { direction: outgoing, policy: allow }
+
+  - name: Allow SSH on custom port
+    ufw:
+      rule: allow
+      port: "{{ ssh_port }}"
+      proto: tcp
+      comment: "Custom SSH port"
+
+  - name: Allow HTTP
+    ufw:
+      rule: allow
+      port: "80"
+      proto: tcp
+      comment: "HTTP"
+
+  - name: Allow HTTPS
+    ufw:
+      rule: allow
+      port: "443"
+      proto: tcp
+      comment: "HTTPS"
+
+  - name: Enable UFW with logging
+    ufw:
+      state: enabled
+      logging: "on"
+
+  ####################################
+  # 7️⃣ FAIL2BAN
+  ####################################
+
+  - name: Install Fail2Ban
+    apt:
+      name: fail2ban
+      state: present
+
+  - name: Configure Fail2Ban for custom SSH port
+    copy:
+      dest: /etc/fail2ban/jail.local
+      content: |
+        [DEFAULT]
+        bantime  = 3600
+        findtime = 600
+        maxretry = 5
+        ignoreip = 127.0.0.1/8
+
+        [sshd]
+        enabled  = true
+        port     = {{ ssh_port }}
+        filter   = sshd
+        logpath  = /var/log/auth.log
+        maxretry = 3
+        bantime  = 86400
+
+        [apache-auth]
+        enabled  = true
+        port     = http,https
+        filter   = apache-auth
+        logpath  = /var/log/apache2/error.log
+        maxretry = 5
+
+        [apache-badbots]
+        enabled  = true
+        port     = http,https
+        filter   = apache-badbots
+        logpath  = /var/log/apache2/access.log
+        maxretry = 2
+      owner: root
+      group: root
+      mode: "0644"
+    notify: Restart Fail2Ban
+
+  - name: Ensure Fail2Ban is running
+    service:
+      name: fail2ban
+      state: started
+      enabled: yes
+    ignore_errors: "{{ ansible_check_mode }}"
+
+  ####################################
+  # 8️⃣ DEPLOY REACT BUILD
+  ####################################
+
+  - name: Remove default Apache index
+    file:
+      path: /var/www/html/index.html
+      state: absent
+    ignore_errors: true
+
+  - name: Copy React build to Apache web root
+    copy:
+      src: ../build/
+      dest: /var/www/html/
+      owner: www-data
+      group: www-data
+      mode: "0644"
+      directory_mode: "0755"
+    notify: Restart Apache
+
+  - name: Configure Apache VirtualHost for React SPA
+    copy:
+      dest: /etc/apache2/sites-available/react-app.conf
+      content: |
+        <VirtualHost *:80>
+            ServerAdmin webmaster@localhost
+            DocumentRoot /var/www/html
+
+            <Directory /var/www/html>
+                Options -Indexes -FollowSymLinks
+                AllowOverride All
+                Require all granted
+            </Directory>
+
+            # React Router — redirect all 404s to index.html
+            ErrorDocument 404 /index.html
+
+            # Security headers
+            Header always set X-Content-Type-Options "nosniff"
+            Header always set X-Frame-Options "SAMEORIGIN"
+            Header always set X-XSS-Protection "1; mode=block"
+            Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+            ErrorLog ${APACHE_LOG_DIR}/error.log
+            CustomLog ${APACHE_LOG_DIR}/access.log combined
+        </VirtualHost>
+      owner: root
+      group: root
+      mode: "0644"
+    notify: Restart Apache
+
+  - name: Enable React app site
+    command: a2ensite react-app.conf
+    args:
+      creates: /etc/apache2/sites-enabled/react-app.conf
+    notify: Restart Apache
+    ignore_errors: "{{ ansible_check_mode }}"
+
+  - name: Disable default Apache site
+    command: a2dissite 000-default.conf
+    args:
+      removes: /etc/apache2/sites-enabled/000-default.conf
+    notify: Restart Apache
+    ignore_errors: "{{ ansible_check_mode }}"
+
+  ####################################
+  # HANDLERS
+  ####################################
+
+  handlers:
+
+    - name: Restart Apache
+      service:
+        name: apache2
+        state: restarted
+      ignore_errors: "{{ ansible_check_mode }}"
+
+    - name: Reload SSH
+      service:
+        name: ssh
+        state: reloaded
+      ignore_errors: "{{ ansible_check_mode }}"
+
+    - name: Restart Fail2Ban
+      service:
+        name: fail2ban
+        state: restarted
+        enabled: yes
+      ignore_errors: "{{ ansible_check_mode }}"

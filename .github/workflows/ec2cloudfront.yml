@@ -1,0 +1,38 @@
+name: Deploy React Build to EC2 + CloudFront
+
+# Run only when there are changes in the build folder
+on:
+  push:
+    paths:
+      - 'build/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1️⃣ Checkout the repo
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # 2️⃣ Set up SSH key for EC2
+    - name: Configure SSH
+      uses: webfactory/ssh-agent@v0.8.1
+      with:
+        ssh-private-key: ${{ secrets.REACT_EC2_KEY }}
+
+    # 3️⃣ Sync the build folder to the server (securely)
+    - name: Sync build folder to EC2
+      run: |
+        rsync -avz -e "ssh -p 2222 -o StrictHostKeyChecking=no" \
+        build/ ubuntu@${{ secrets.EC2_PUBLIC_IP }}:/var/www/html/
+      shell: bash
+
+    # 4️⃣ Invalidate CloudFront to refresh cache
+    - name: Invalidate CloudFront cache
+      uses: aws-actions/aws-cli@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: eu-west-2
+        args: cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DIST_ID }} --paths "/*"

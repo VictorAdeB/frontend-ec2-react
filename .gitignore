@@ -13,6 +13,7 @@
 
 #keys
 *.pem
+*.json
 
 # testing
 /coverage

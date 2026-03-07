@@ -1,3 +1,5 @@
+![EC2 Server Hardening](./images/server-hardening.png)
+
 ## React AWS Infrastructure Deployment
 
 <p> This project demonstrates how to deploy a React application on AWS EC2 using Infrastructure as Code and configuration automation. The infrastructure is provisioned with Terraform, while server configuration and application deployment are automated using Ansible.</p>

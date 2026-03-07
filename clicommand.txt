@@ -3,20 +3,28 @@ aws dynamodb create-table --table-name terraform-state-lock --attribute-definiti
 ssh -i ~/react-ec2-key.pem ubuntu@13.40.24.234 -p 2222 -v
 ssh -i ~/react-ec2-key.pem ubuntu@13.40.24.234 -p 2222 
 
+
+#ssh command config to edit and change config and validate changes
 sudo nano /etc/ssh/sshd_config
 sudo systemctl restart sshd
 sudo ss -tlnp | grep ssh
 chmod 600 ./react-ec2-key.pem
 
+#ansible commands
 ansible-playbook -i hosts.ini playbook.yaml --check
 ansible-playbook playbook.yaml -i hosts.ini
 
+#to check if build folder is there
 ls /var/www/html
+config for permssion
 sudo chown -R www-data:www-data /var/www
 sudo chmod -R 755 /var/www
+#command for apache to check for errors and valid syntax
 sudo apache2ctl configtest
+#command for apache to restrat apache2
 sudo systemctl restart apache2
 
+#command and config to template config for apache to work if you don't see something like this it will bring out forbidden
 sudo nano /etc/apache2/apache2.conf
 <Directory /var/www/>
     Options Indexes FollowSymLinks

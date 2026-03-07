@@ -1,70 +1,181 @@
-# Getting Started with Create React App
+## React AWS Infrastructure Deployment
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+<p> This project demonstrates how to deploy a React application on AWS EC2 using Infrastructure as Code and configuration automation. The infrastructure is provisioned with Terraform, while server configuration and application deployment are automated using Ansible.</p>
 
-## Available Scripts
+<p> The goal of this project is to create a secure, reproducible, and automated deployment pipeline for hosting a React single-page application.</p>
 
-In the project directory, you can run:
+<hr/>
 
-### `npm start`
+## Architecture Overview
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+The deployment consists of:
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+<strong> Terraform </strong>
 
-### `npm test`
+* Provisions AWS infrastructure
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+* Creates EC2 instance
 
-### `npm run build`
+* Creates Security Group
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+* Generates SSH key
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+* Configures networking
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+<strong> Ansible</strong> 
 
-### `npm run eject`
+* Hardens the server
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+* Installs and configures Apache
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+* Configures firewall (UFW)
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+* Configures Fail2Ban
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+* Deploys the React build
 
-## Learn More
+<strong> Apache</strong>
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+* Serves the React build
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+* Handles SPA routing
 
-### Code Splitting
+* Adds security headers
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+<hr/>
 
-### Analyzing the Bundle Size
+## Infrastructure Components
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+| Component | Purpose
+| -------- | -------- 
+| EC2 | Hosts the React application
+| Security Group | Controls inbound traffic 
+| SSH | Secure remote access   
+| Apache | Web server for React build
+| UFW | Host firewall  
+|Fail2Ban | Protects against brute-force attacks 
 
-### Making a Progressive Web App
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+## Deployment Workflow
+1️⃣  <strong> Provision Infrastructure</strong>
+```
+terraform init
+terraform plan
+terraform apply
+```
 
-### Advanced Configuration
+This creates:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+* EC2 instance
 
-### Deployment
+* Security group
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+* SSH key pair
 
-### `npm run build` fails to minify
+* Network configuration
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+
+2️⃣ <strong>  Configure Server</strong>
+
+Run the Ansible playbook:
+```
+ansible-playbook -i inventory playbook.yml
+```
+
+The playbook will:
+
+* Update the system
+
+* Harden SSH
+
+* Install Apache
+
+* Configure firewall
+
+* Install Fail2Ban
+
+* Deploy the React application
+
+<hr/>
+
+## React SPA Configuration
+
+Apache is configured to support React Router using rewrite rules.
+
+Example .htaccess:
+```
+RewriteEngine On
+RewriteBase /
+RewriteRule ^index\.html$ - [L]
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+RewriteRule . /index.html [L]
+```
+
+This ensures all routes fallback to index.html, enabling client-side routing.
+
+<hr />
+
+Security Hardening
+
+The server is hardened using several techniques:
+
+ <strong> SSH Hardening</strong> 
+
+Custom SSH port
+
+Root login disabled
+
+Password authentication disabled
+
+Max authentication attempts limited
+
+ <strong> Firewall</strong> 
+
+UFW allows only:
+
+* SSH
+
+* HTTP
+
+* HTTPS
+
+ <strong> Fail2Ban </strong>
+
+* Blocks repeated failed SSH attempts
+
+* Monitors Apache logs for malicious requests
+
+<hr/>
+
+### Lessons Learned
+
+During development several common pitfalls were encountered:
+
+* Incorrect Security Group rules can lock you out of the server
+
+* Apache directory options can break .htaccess rewrites
+
+* Hardening SSH without verifying keys can break remote access
+
+These lessons highlight the importance of incremental security changes and testing.
+
+<hr/>
+
+#### Future Improvements
+
+Planned improvements include:
+
+* Automating Apache VirtualHost configuration entirely in Ansible
+
+* Adding domain name and HTTPS with Let's Encrypt
+
+* Automating deployments through CI/CD
+
+* Adding monitoring and logging
+
+* Removing the need for manual SSH access
+
+* Repository Structure

@@ -46,3 +46,6 @@ terraform output -json > resource.json
 
 
 #when doing a server hardening, don't temper with sg rules, as it might cause loss of connectivity, and you might not be able to access the server to fix it. Instead, do the hardening in a way that doesn't affect network access, and then once you're sure it's working, you can update the sg rules if needed.
+
+command to remove unnecessary irrelvant commands
+git rm --cached ./file-path

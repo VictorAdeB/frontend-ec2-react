@@ -172,9 +172,9 @@ Planned improvements include:
 
 * Adding domain name and HTTPS with Let's Encrypt
 
-* Automating deployments through CI/CD
+<!-- * Automating deployments through CI/CD
 
-* Adding monitoring and logging
+* Adding monitoring and logging -->
 
 * Removing the need for manual SSH access
 

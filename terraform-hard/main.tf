@@ -61,36 +61,66 @@ resource "aws_route_table_association" "public_assoc" {
 # SECURITY GROUP
 ############################
 
-resource "aws_security_group" "web_sg" { 
+# resource "aws_security_group" "web_sg" { 
+#   name   = "react-web-sg"
+#   vpc_id = aws_vpc.main.id
+
+#   # HTTP / Apache
+#   ingress {
+#     description = "Apache"
+#     from_port   = 80
+#     to_port     = 80
+#     protocol    = "tcp"
+#     cidr_blocks = ["0.0.0.0/0"]
+#   }
+
+#   # Custom SSH on port 2222
+#   ingress {
+#     description = "SSH from my IP"
+#     from_port   = 2222
+#     to_port     = 2222
+#     protocol    = "tcp"
+#     cidr_blocks = [var.my_ip]  # e.g., "203.0.113.25/32"
+#   }
+
+#   # Allow all outbound
+#   egress {
+#     from_port   = 0
+#     to_port     = 0
+#     protocol    = "-1"
+#     cidr_blocks = ["0.0.0.0/0"]
+#   }
+# }
+
+data "http" "my_ip" {
+  url = "https://checkip.amazonaws.com"
+}
+
+locals {
+  my_ip = "${chomp(data.http.my_ip.response_body)}/32"
+}
+
+resource "aws_security_group" "web_sg" {
   name   = "react-web-sg"
   vpc_id = aws_vpc.main.id
 
-  # HTTP / Apache
   ingress {
-    description = "Apache"
+    description = "SSH from my current IP"
+    from_port   = 2222
+    to_port     = 2222
+    protocol    = "tcp"
+    cidr_blocks = [local.my_ip]
+  }
+
+  ingress {
+    description = "HTTP"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
-
-  # Custom SSH on port 2222
-  ingress {
-    description = "SSH from my IP"
-    from_port   = 2222
-    to_port     = 2222
-    protocol    = "tcp"
-    cidr_blocks = [var.my_ip]  # e.g., "203.0.113.25/32"
-  }
-
-  # Allow all outbound
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
 }
+
 
 ############################
 # IAM ROLE FOR SSM

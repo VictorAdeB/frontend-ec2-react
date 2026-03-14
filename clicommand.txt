@@ -79,3 +79,6 @@ git rm --cached ./file-path
 # if those rules restrict your current access. Validate hardening internally 
 # first, ensure access is stable, and only then update the SG rules.
 # ==============================================================================
+
+
+aws cloudfront list-distributions

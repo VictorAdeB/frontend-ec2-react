@@ -1,38 +1,50 @@
 name: Deploy React Build to EC2 + CloudFront
 
-# Run only when there are changes in the build folder
 on:
   push:
     paths:
-      - 'build/**'
+      - "build/**"
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    # 1️⃣ Checkout the repo
-    - name: Checkout code
-      uses: actions/checkout@v3
 
-    # 2️⃣ Set up SSH key for EC2
-    - name: Configure SSH
-      uses: webfactory/ssh-agent@v0.8.1
+    # 1️⃣ Checkout repository
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # 2️⃣ Configure SSH agent
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.9.0
       with:
         ssh-private-key: ${{ secrets.REACT_EC2_KEY }}
 
-    # 3️⃣ Sync the build folder to the server (securely)
-    - name: Sync build folder to EC2
+    # 3️⃣ Add server to known hosts (safer than disabling checks)
+    - name: Add server to known hosts
       run: |
-        rsync -avz -e "ssh -p 2222 -o StrictHostKeyChecking=no" \
-        build/ ubuntu@${{ secrets.EC2_PUBLIC_IP }}:/var/www/html/
-      shell: bash
+        mkdir -p ~/.ssh
+        ssh-keyscan -p 2222 ${{ secrets.EC2_PUBLIC_IP }} >> ~/.ssh/known_hosts
 
-    # 4️⃣ Invalidate CloudFront to refresh cache
-    - name: Invalidate CloudFront cache
-      uses: aws-actions/aws-cli@v2
+    # 4️⃣ Deploy React build using rsync
+    - name: Deploy build to EC2
+      run: |
+        rsync -avz --delete \
+        -e "ssh -p 2222" \
+        build/ ubuntu@${{ secrets.EC2_PUBLIC_IP }}:/var/www/html/
+
+    # 5️⃣ Configure AWS credentials
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: eu-west-2
-        args: cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DIST_ID }} --paths "/*"
+
+    # 6️⃣ Invalidate CloudFront cache
+    - name: Invalidate CloudFront
+      run: |
+        aws cloudfront create-invalidation \
+        --distribution-id ${{ secrets.CLOUDFRONT_DIST_ID }} \
+        --paths "/*"

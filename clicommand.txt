@@ -80,5 +80,11 @@ git rm --cached ./file-path
 # first, ensure access is stable, and only then update the SG rules.
 # ==============================================================================
 
-
+how to check cloudfront distributions
 aws cloudfront list-distributions
+
+
+how i solved permissions to github actions
+sudo chown -R ubuntu:www-data /var/www/html
+sudo chmod -R 775 /var/www/html
+ls -ld /var/www/html
